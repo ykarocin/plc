@@ -237,7 +237,7 @@ wr (i,v) [] = [(i,v)]VarVar
 type Id = String
 type Numero = Double
 
-data Termo =
+data Termo = Var Id
            | LitB Boolean
            | LitN Numero
            | LitS String
@@ -287,10 +287,28 @@ ambiente = [("*",Funcao (\x -> (Funcao (\y -> mulValor x y))))]
 mulValor (Numero x) (Numero y) = Numero (x*y)
 mulValor _ _ = Excecao
 
-int a (Som t u) e = (somaVal v1 v2, e2)
+int h a (Var x) e = (search x (a ++ e), e, h)
+
+int h a (LitB b) e = (B b, e, h)
+int h a (LitS s) e = (S n, e, h)
+int h a (LitN n) e = (N n, e, h)
+
+int h a (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e) --todo
+
+int h a (Apl t u) e = app v1 v2 e2 --todo
+                    where (v1,e1) = int a t e
+                          (v2,e2) = int a u e1
+
+int h a (Atr x t) e = (v1, wr (x,v1) e1, h1) --todo
+                    where (v1,e1,h1) = int a t e h
+
+int h a (Seq t u) e = int a u e1 --todo
+                    where (_,e1) = int a t e h
+
+
+int h a (Som t u) e = (somaVal v1 v2, e2) --todo
                     where (v1,e1) = int a t e
                           (v2,e2) = idata Valor = Num Double
            | Fun (Valor -> Estado -> (Valor,Estado))
            | Erront a u e1
 
-int ambiente (Var x) e = (search x (a ++ e), e)
