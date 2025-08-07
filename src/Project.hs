@@ -243,23 +243,24 @@ data Termo = Var Id
            | LitS String
            --
            | Atr Termo Termo
-           | Mul Termo Termo
+           | Mul Termo Termo -- lucas g
            --
-           | If Comparacao Termo Termo
-           | While Comparacao Termo
-           | For Atr Comparacao Termo Termo
+           | If Comparacao Termo Termo -- lucas g
+           | While Comparacao Termo -- joao
+           | For Atr Comparacao Termo Termo -- lucas o
            --Var
-           | Fun Id [Id] Termo
-           | Call Termo Id [Termo]
+           | Fun Id [Id] Termo -- lucas o
+           | Call Termo Id [Termo] -- ykaro
            | Lam Id Termo
            | Apl Termo Termo 
            | Seq Termo Termo
            --
-           | Class Id [Fun] [Id]
-           | New Id
-           | InstanceOf Termo Id
-           | This 
-           | FieldAccess Termo Id
+           | Class Id [Fun] [Id] -- ykaro
+           | New Id -- joao
+           | InstanceOf Termo Id -- lucas g
+           | This -- lucas o
+           | FieldAccess Termo Id -- pendente
+           | Ref Termo
 
 data Comparacao = Eq Termo Termo
                | Ne Termo Termo
@@ -293,22 +294,47 @@ int h a (LitB b) e = (B b, e, h)
 int h a (LitS s) e = (S n, e, h)
 int h a (LitN n) e = (N n, e, h)
 
-int h a (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e) --todo
-
-int h a (Apl t u) e = app v1 v2 e2 --todo
-                    where (v1,e1) = int a t e
-                          (v2,e2) = int a u e1
-
-int h a (Atr x t) e = (v1, wr (x,v1) e1, h1) --todo
+int h a (Atr x t) e = (v1, wr (x,v1) e1, h1)
                     where (v1,e1,h1) = int a t e h
 
-int h a (Seq t u) e = int a u e1 --todo
-                    where (_,e1) = int a t e h
+int h a (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e, h)
+
+int h a (Apl t u) e = app v1 v2 e2 h2
+                    where (v1,e1, h1) = int a t e h
+                          (v2,e2, h2) = int a u e1 h1
 
 
-int h a (Som t u) e = (somaVal v1 v2, e2) --todo
+int h a (Seq t u) e = int a u e1 h1 
+                    where (_,e1, h1) = int a t e h
+
+int h a (Ref t) e =
+    case int h a t e of
+        (Ref i, e1, h1) -> (Ref i, e1, h1)      -- já é referência? retorna
+        (_, e1, h1)     -> (Erro, e1, h1)       -- não é referência? erro
+
+int h a (FieldAccess t campo) e =
+  case int h a t e of
+    (Ref addr, e1, h1) ->
+      case lookup addr h1 of
+        Just (_, estadoObjeto) ->
+          case lookup campo estadoObjeto of
+            Just valorCampo -> (valorCampo, e1, h1)
+            Nothing         -> (Erro, e1, h1)  -- campo não existe
+        Nothing -> (Erro, e1, h1)  -- endereço não encontrado
+    _ -> (Erro, e, h)  -- t não avaliou para uma referência
+
+
+int h a (Somh t u) e = (somaVal v1 v2, e2) --todo
                     where (v1,e1) = int a t e
                           (v2,e2) = idata Valor = Num Double
            | Fun (Valor -> Estado -> (Valor,Estado))
            | Erront a u e1
 
+-- search :: Eq a => a -> [(a, Valor)] -> Valor
+
+search i [] = Erro
+search i ((j,v):l) = if i == j then v else search i l
+
+-- wr :: Eq a => (a, t) -> [(a, t)] -> [(a, t)]
+
+wr (i,v) [] = [(i,v)]VarVar
