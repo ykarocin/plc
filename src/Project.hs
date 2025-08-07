@@ -259,7 +259,7 @@ data Termo = Var Id
            | New Id -- joao
            | InstanceOf Termo Id -- lucas g
            | This -- lucas o
-           | FieldAccess Termo Id -- pendente
+           | FieldAccess Termo Id
            | Ref Termo
 
 data Comparacao = Eq Termo Termo
@@ -269,6 +269,14 @@ data Comparacao = Eq Termo Termo
                | Gt Termo Termo
                | Ge Termo Termo Termo
 
+-- Declaração de classes
+type ClasseId = String
+type CampoId = String
+type MetodoId = String
+type Classe = (ClasseId, [Metodo], [CampoId])
+
+data Metodo = Metodo MetodoId [Id] Termo
+
 data Valor = B Boolean
            | N Numero
            | S String
@@ -277,52 +285,57 @@ data Valor = B Boolean
            | Erro
 
 type Estado = [(String,Valor)]
-type Ambiente = [(String,Termo)]
+type Ambiente = [(String,Termo)] -- Ambiente de variáveis e funções
+type AmbienteClasse = [(ClasseId, Classe)] -- Ambiente de classes
 type Heap = [(Integer, (String,Estado))]
 
--- int :: [(Integer, (String,Estado))] -> [(String, Termo)] -> Termo -> [(String, Valor)] -> (Valor, [(String,Valor)], [(Integer, (String,Estado))])
--- int :: Heap -> Ambiente -> Termo -> Estado -> (Valor, Estado, Heap)
+-- int :: [(Integer, (String,Estado))] -> [(String, Termo)] -> [(ClasseId, Classe)] -> Termo -> [(String, Valor)] -> (Valor, [(String,Valor)], [(Integer, (String,Estado))], [(ClasseId, Classe)])
+-- int :: Heap -> Ambiente -> AmbienteClasse -> Termo -> Estado -> (Valor, Estado, Heap, AmbienteClasse)
 --
 
 ambiente = [("*",Funcao (\x -> (Funcao (\y -> mulValor x y))))]
 mulValor (Numero x) (Numero y) = Numero (x*y)
 mulValor _ _ = Excecao
 
-int h a (Var x) e = (search x (a ++ e), e, h)
+int h a ac (Var x) e = (search x (a ++ e), e, h, ac)
 
-int h a (LitB b) e = (B b, e, h)
-int h a (LitS s) e = (S n, e, h)
-int h a (LitN n) e = (N n, e, h)
+int h a ac (LitB b) e = (B b, e, h, ac)
+int h a ac (LitS s) e = (S n, e, h, ac)
+int h a ac (LitN n) e = (N n, e, h, ac)
 
-int h a (Atr x t) e = (v1, wr (x,v1) e1, h1)
-                    where (v1,e1,h1) = int a t e h
+int h a ac (Atr x t) e = (v1, wr (x,v1) e1, h1, ac1)
+                    where (v1,e1,h1, ac1) = int a t e h ac
 
-int h a (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e, h)
+int h a ac (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e, h, ac)
 
-int h a (Apl t u) e = app v1 v2 e2 h2
-                    where (v1,e1, h1) = int a t e h
-                          (v2,e2, h2) = int a u e1 h1
+int h a ac (Apl t u) e = app v1 v2 e2 h2 ac2
+                    where (v1,e1, h1, ac1) = int a t e h ac
+                          (v2,e2, h2, ac2) = int a u e1 h1 ac1
 
 
-int h a (Seq t u) e = int a u e1 h1 
-                    where (_,e1, h1) = int a t e h
+int h a ac (Seq t u) e = int a u e1 h1 ac1 
+                    where (_,e1, h1, ac1) = int a t e h ac
 
-int h a (Ref t) e =
-    case int h a t e of
-        (Ref i, e1, h1) -> (Ref i, e1, h1)      -- já é referência? retorna
-        (_, e1, h1)     -> (Erro, e1, h1)       -- não é referência? erro
+int h a ac (Ref t) e =
+    case int h a ac t e of
+        (Ref i, e1, h1, ac1) -> (Ref i, e1, h1, ac1)      -- já é referência? retorna
+        (_, e1, h1, ac1)     -> (Erro, e1, h1, ac1)       -- não é referência? erro
 
-int h a (FieldAccess t campo) e =
-  case int h a t e of
-    (Ref addr, e1, h1) ->
+int h a ac (FieldAccess t campo) e =
+  case int h a ac t e of
+    (Ref addr, e1, h1, ac1) ->
       case lookup addr h1 of
         Just (_, estadoObjeto) ->
           case lookup campo estadoObjeto of
-            Just valorCampo -> (valorCampo, e1, h1)
-            Nothing         -> (Erro, e1, h1)  -- campo não existe
-        Nothing -> (Erro, e1, h1)  -- endereço não encontrado
-    _ -> (Erro, e, h)  -- t não avaliou para uma referência
+            Just valorCampo -> (valorCampo, e1, h1, ac1)
+            Nothing         -> (Erro, e1, h1, ac1)  -- campo não existe
+        Nothing -> (Erro, e1, h1, ac1)  -- endereço não encontrado
+    _ -> (Erro, e, h, ac)  -- t não avaliou para uma referência
 
+int h a ac (Class nome metodos campos) e =
+    let classe = (nome, metodos, campos)
+        ac' = (nome, classe) : ac
+    in (VVoid, e, h, ac')
 
 int h a (Somh t u) e = (somaVal v1 v2, e2) --todo
                     where (v1,e1) = int a t e
