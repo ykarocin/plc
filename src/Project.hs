@@ -280,7 +280,7 @@ data Metodo = Metodo MetodoId [Id] Termo
 data Valor = B Boolean
            | N Numero
            | S String
-           | Class ([Fun] [Id])
+           | Class ([Metodo] [Id])
            | Fun (Valor -> Estado -> (Valor,Estado))
            | Erro
 
@@ -316,32 +316,76 @@ int h a ac (Apl t u) e = app v1 v2 e2 h2 ac2
 int h a ac (Seq t u) e = int a u e1 h1 ac1 
                     where (_,e1, h1, ac1) = int a t e h ac
 
-int h a ac (Ref t) e =
-    case int h a ac t e of
-        (Ref i, e1, h1, ac1) -> (Ref i, e1, h1, ac1)      -- já é referência? retorna
-        (_, e1, h1, ac1)     -> (Erro, e1, h1, ac1)       -- não é referência? erro
+int h a ac (Ref t) e = resultado
+  where (v, e1, h1, ac1) = int h a ac t e
+        resultado
+          | isRef v    = (v, e1, h1, ac1)
+          | otherwise  = (Erro, e1, h1, ac1)
 
-int h a ac (FieldAccess t campo) e =
-  case int h a ac t e of
-    (Ref addr, e1, h1, ac1) ->
-      case lookup addr h1 of
-        Just (_, estadoObjeto) ->
-          case lookup campo estadoObjeto of
-            Just valorCampo -> (valorCampo, e1, h1, ac1)
-            Nothing         -> (Erro, e1, h1, ac1)  -- campo não existe
-        Nothing -> (Erro, e1, h1, ac1)  -- endereço não encontrado
-    _ -> (Erro, e, h, ac)  -- t não avaliou para uma referência
+        isRef (Ref _) = True
+        isRef _       = False
 
-int h a ac (Class nome metodos campos) e =
-    let classe = (nome, metodos, campos)
+int h a ac (FieldAccess t campo) e = resultado
+  where (v, e1, h1, ac1) = int h a ac t e
+        resultado = case v of
+          Ref addr -> case lookup addr h1 of
+            Just (_, estadoObjeto) -> case lookup campo estadoObjeto of
+              Just valorCampo -> (valorCampo, e1, h1, ac1)
+              Nothing         -> (Erro, e1, h1, ac1)
+            Nothing -> (Erro, e1, h1, ac1)
+          _ -> (Erro, e, h, ac)
+
+int h a ac (Class nome metodos campos) e = (VVoid, e, h, ac')
+  where classe = (nome, metodos, campos)
         ac' = (nome, classe) : ac
-    in (VVoid, e, h, ac')
+
 
 int h a (Somh t u) e = (somaVal v1 v2, e2) --todo
                     where (v1,e1) = int a t e
                           (v2,e2) = idata Valor = Num Double
            | Fun (Valor -> Estado -> (Valor,Estado))
            | Erront a u e1
+
+-- Interpretação do termo Call:
+int :: Heap -> Ambiente -> AmbienteClasse -> Termo -> Estado -> (Valor, Estado, Heap, AmbienteClasse)
+int h a ac (Call t nome args) e = resultado
+  where (vt, e1, h1, ac1)       = int h a ac t e
+        (valArgs, ef, hf, acf)  = avaliaArgs args h1 a ac1 e1
+
+        resultado = if isRef vt
+                then chamaMetodo (getRef vt) nome valArgs ef hf acf
+                else chamaFuncao nome valArgs ef hf acf
+
+          isRef (Ref _) = True
+          isRef _       = False
+
+          getRef (Ref i) = i
+          getRef _       = error "Valor não é referência (Ref)"
+
+-- Avaliação dos argumentos:
+avaliaArgs :: [Termo] -> Heap -> Ambiente -> AmbienteClasse -> Estado -> ([Valor], Estado, Heap, AmbienteClasse)
+avaliaArgs [] h _ ac e = ([], e, h, ac)
+avaliaArgs (t:ts) h a ac e = (v1 : vs, ef, hf, acf)
+  where (v1, e1, h1, ac1)       = int h a ac t e
+        (vs, ef, hf, acf)       = avaliaArgs ts h1 a ac1 e1
+
+-- Busca o método em uma lista:
+buscaMetodo :: Id -> [Metodo] -> Maybe Metodo
+buscaMetodo nome = find (\(Metodo nomeM _ _) -> nome == nomeM)
+
+-- Chamada de método:
+chamaMetodo :: Integer -> Id -> [Valor] -> Estado -> Heap -> AmbienteClasse -> (Valor, Estado, Heap, AmbienteClasse)
+chamaMetodo i nome args e h ac = int h [] ac corpo (thisEnv : escopo ++ estadoObj)
+  where Just (classeNome, estadoObj) = lookup i h
+        Just (_, metodos, _)         = lookup classeNome ac
+        Just (Metodo _ params corpo) = buscaMetodo nome metodos
+        escopo                       = zip params args
+        thisEnv                      = ("this", Ref i)
+
+-- Chamada de função global:
+chamaFuncao :: Id -> [Valor] -> Estado -> Heap -> AmbienteClasse -> (Valor, Estado, Heap, AmbienteClasse)
+chamaFuncao nome (arg:_) e h ac = f arg e
+  where Just (Fun f) = lookup nome ambiente
 
 -- search :: Eq a => a -> [(a, Valor)] -> Valor
 
