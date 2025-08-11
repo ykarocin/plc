@@ -400,13 +400,6 @@ int h a ac (Class nome metodos campos) e = (VVoid, e, h, ac')
   where classe = (nome, metodos, campos)
         ac' = (nome, classe) : ac
 
-
-int h a (Somh t u) e = (somaVal v1 v2, e2) --todo
-                    where (v1,e1) = int a t e
-                          (v2,e2) = idata Valor = Num Double
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erront a u e1
-
 -- IMPLEMENTAÇÃO DO FOR -lmlo
 int h a ac (For inicializacao condicao atualizacao corpo) e = loopFor h_ini a ac_ini condicao atualizacao corpo e_ini
   where
