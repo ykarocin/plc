@@ -306,6 +306,66 @@ int h a ac (LitN n) e = (N n, e, h, ac)
 int h a ac (Atr x t) e = (v1, wr (x,v1) e1, h1, ac1)
                     where (v1,e1,h1, ac1) = int a t e h ac
 
+-- IMPLEMENTAÇÃO DE MULTIPLICAÇÃO - lgs4
+int h a ac (Mul t1 t2) e = (mulValor v1 v2, e2, h2, ac2)
+                    where (v1, e1, h1, ac1) = int h a ac t1 e
+                          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+-- IMPLEMENTAÇÃO DE IF
+int h a ac (If cond thenBranch elseBranch) e = 
+    case vcond of
+        B True  -> int h1 a ac1 thenBranch e1
+        B False -> int h1 a ac1 elseBranch e1
+        _       -> (Erro, e1, h1, ac1)
+    where (vcond, e1, h1, ac1) = evalCond h a ac cond e
+
+-- Função auxiliar para avaliar comparações
+evalCond h a ac (Eq t1 t2) e = (B (v1 == v2), e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Ne t1 t2) e = (B (v1 /= v2), e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Lt t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 < n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Le t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 <= n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Gt t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 > n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Ge t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 >= n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+-- IMPLEMENTAÇÃO DE INSTANCEOF
+int h a ac (InstanceOf t className) e = (resultado, e1, h1, ac1)
+    where (v, e1, h1, ac1) = int h a ac t e
+          resultado = case v of
+              Ref addr -> case lookup addr h1 of
+                  Just (objClass, _) -> B (objClass == className)
+                  Nothing -> Erro
+              _ -> B False
+--lgs4
+
 int h a ac (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e, h, ac)
 
 int h a ac (Apl t u) e = app v1 v2 e2 h2 ac2
