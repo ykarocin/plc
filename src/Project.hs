@@ -400,13 +400,6 @@ int h a ac (Class nome metodos campos) e = (VVoid, e, h, ac')
   where classe = (nome, metodos, campos)
         ac' = (nome, classe) : ac
 
-
-int h a (Somh t u) e = (somaVal v1 v2, e2) --todo
-                    where (v1,e1) = int a t e
-                          (v2,e2) = idata Valor = Num Double
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erront a u e1
-
 -- IMPLEMENTAÇÃO DO FOR -lmlo
 int h a ac (For inicializacao condicao atualizacao corpo) e = loopFor h_ini a ac_ini condicao atualizacao corpo e_ini
   where
@@ -453,6 +446,41 @@ int h a ac (Fun nome params corpo) e = (fval, wr (nome, fval) e, h, ac)
 int h a ac This e = (search "this" (a ++ e), e, h, ac)
 -- lmlo
 
+
+-- Implementação da função int para While - jalr
+int h a ac (While cond body) e = 
+    case vcond of
+        B True -> 
+            -- Executa o corpo e chama While recursivamente com novo estado
+            let (_, e', h', ac') = int h a ac body e1
+            in int h' a ac' (While cond body) e'
+        B False -> 
+            -- Condição falsa, termina o loop retornando estado atual
+            (VVoid, e1, h1, ac1)
+        _ -> 
+            -- Erro se condição não for booleana
+            (Erro, e1, h1, ac1)
+    where
+        -- Avalia a condição inicial
+        (vcond, e1, h1, ac1) = evalCond h a ac cond e
+
+
+-- Implementação da função int para New - jalr
+int h a ac (New className) e = 
+    case lookup className ac of
+        Just (_, _, campos) -> 
+            -- Cria novo ID único para o objeto
+            let newId = fromIntegral (length h) + 1
+                -- Cria estado inicial com campos padrão
+                estadoInicial = map (\campo -> (campo, valorPadrao)) campos
+                -- Valor padrão (poderia ser N 0, B False, S "", etc.)
+                valorPadrao = N 0  
+                -- Adiciona ao heap
+                novoHeap = (newId, (className, estadoInicial)) : h
+            in (Ref newId, e, novoHeap, ac)
+        Nothing -> 
+            -- Classe não encontrada
+            (Erro, e, h, ac)
 
 -- Interpretação do termo Call:
 int :: Heap -> Ambiente -> AmbienteClasse -> Termo -> Estado -> (Valor, Estado, Heap, AmbienteClasse)
