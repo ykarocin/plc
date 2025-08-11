@@ -282,6 +282,7 @@ data Valor = B Boolean
            | S String
            | Class ([Metodo] [Id])
            | Fun (Valor -> Estado -> (Valor,Estado))
+           | VVoid 
            | Erro
 
 type Estado = [(String,Valor)]
@@ -305,6 +306,66 @@ int h a ac (LitN n) e = (N n, e, h, ac)
 
 int h a ac (Atr x t) e = (v1, wr (x,v1) e1, h1, ac1)
                     where (v1,e1,h1, ac1) = int a t e h ac
+
+-- IMPLEMENTAÇÃO DE MULTIPLICAÇÃO - lgs4
+int h a ac (Mul t1 t2) e = (mulValor v1 v2, e2, h2, ac2)
+                    where (v1, e1, h1, ac1) = int h a ac t1 e
+                          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+-- IMPLEMENTAÇÃO DE IF
+int h a ac (If cond thenBranch elseBranch) e = 
+    case vcond of
+        B True  -> int h1 a ac1 thenBranch e1
+        B False -> int h1 a ac1 elseBranch e1
+        _       -> (Erro, e1, h1, ac1)
+    where (vcond, e1, h1, ac1) = evalCond h a ac cond e
+
+-- Função auxiliar para avaliar comparações
+evalCond h a ac (Eq t1 t2) e = (B (v1 == v2), e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Ne t1 t2) e = (B (v1 /= v2), e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Lt t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 < n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Le t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 <= n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Gt t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 > n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+evalCond h a ac (Ge t1 t2) e = 
+    case (v1, v2) of
+        (N n1, N n2) -> (B (n1 >= n2), e2, h2, ac2)
+        _ -> (Erro, e2, h2, ac2)
+    where (v1, e1, h1, ac1) = int h a ac t1 e
+          (v2, e2, h2, ac2) = int h a ac t2 e1
+
+-- IMPLEMENTAÇÃO DE INSTANCEOF
+int h a ac (InstanceOf t className) e = (resultado, e1, h1, ac1)
+    where (v, e1, h1, ac1) = int h a ac t e
+          resultado = case v of
+              Ref addr -> case lookup addr h1 of
+                  Just (objClass, _) -> B (objClass == className)
+                  Nothing -> Erro
+              _ -> B False
+--lgs4
 
 int h a ac (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e, h, ac)
 
@@ -339,12 +400,52 @@ int h a ac (Class nome metodos campos) e = (VVoid, e, h, ac')
   where classe = (nome, metodos, campos)
         ac' = (nome, classe) : ac
 
+-- IMPLEMENTAÇÃO DO FOR -lmlo
+int h a ac (For inicializacao condicao atualizacao corpo) e = loopFor h_ini a ac_ini condicao atualizacao corpo e_ini
+  where
+    -- 1. Executa a inicialização uma única vez para obter o estado inicial do laço
+    (_, e_ini, h_ini, ac_ini) = int h a ac inicializacao e
 
-int h a (Somh t u) e = (somaVal v1 v2, e2) --todo
-                    where (v1,e1) = int a t e
-                          (v2,e2) = idata Valor = Num Double
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erront a u e1
+loopFor :: Heap -> Ambiente -> AmbienteClasse -> Comparacao -> Termo -> Termo -> Estado -> (Valor, Estado, Heap, AmbienteClasse)
+loopFor h a ac condicao atualizacao corpo e =
+  -- 2. Avalia a condição no estado atual
+  let (v_cond, e_cond, h_cond, ac_cond) = evalCond h a ac condicao e
+  in case v_cond of
+      -- 3. Se a condição for VERDADEIRA
+      B True ->
+        -- 3a. Executa o corpo do laço
+        let (_, e_corpo, h_corpo, ac_corpo) = int h_cond a ac_cond corpo e_cond
+        -- 3b. Executa a expressão de atualização
+        in let (_, e_atual, h_atual, ac_atual) = int h_corpo a ac_corpo atualizacao e_corpo
+        -- 3c. Chama recursivamente o laço com o estado totalmente atualizado
+        in loopFor h_atual a ac_atual condicao atualizacao corpo e_atual
+
+      -- 4. Se a condição for FALSA, o laço termina.
+      B False -> (VVoid, e_cond, h_cond, ac_cond) -- Retorna "void" e o estado atual.
+
+      -- 5. Se a condição não resultar em um booleano, é um erro.
+      _ -> (Erro, e_cond, h_cond, ac_cond)
+
+-- IMPLEMENTAÇÃO DE FUN
+int h a ac (Fun nome params corpo) e = (fval, wr (nome, fval) e, h, ac)
+  where
+    -- Cria o valor da função (a clausura)
+    fval = Fun (\args exec_state ->
+      -- Verifica se o número de argumentos passados é o correto
+      if length args /= length params
+      then (Erro, exec_state, h, ac) -- Erro de aridade
+      else
+        -- Cria o escopo local da função, zipando os nomes dos parâmetros com os valores dos argumentos
+        let escopoLocal = zip params args
+        -- O novo ambiente para o corpo da função é o escopo local mais o ambiente capturado 'a'
+        in int h (escopoLocal ++ a) ac corpo exec_state
+    )
+
+
+-- IMPLEMENTAÇÃO DE THIS
+int h a ac This e = (search "this" (a ++ e), e, h, ac)
+-- lmlo
+
 
 -- Implementação da função int para While - jalr
 int h a ac (While cond body) e = 
