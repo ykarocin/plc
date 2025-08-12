@@ -44,12 +44,12 @@ instance Show Termo where
     show (Lam p corpo)        = "\\" ++ p ++ " -> " ++ show corpo
     show (Apl t1 t2)          = show t1 ++ " " ++ show t2
     show (Seq t1 t2)          = show t1 ++ " ; " ++ show t2
-    show (Class nome _ cs)    = "class " ++ nome ++ " { ... campos: " ++ unwords cs ++ " }"
+    show (Class nome methods cs)    = "class " ++ nome ++ "{ " ++ unwords (map show methods) ++ " } fields: " ++ unwords cs
     show (New nome)           = "new " ++ nome ++ "()"
     show (InstanceOf t cn)    = show t ++ " instanceof " ++ cn
-    show This                 = "this"
+    show This                 = "this cannot be printed!"
     show (FieldAccess t c)    = show t ++ "." ++ c
-    show (Ref t)              = "ref(" ++ show t ++ ")"
+    show (Ref t)              = "ref cannot be printed!"
 
 data Comparacao = Eq Termo Termo
                | Ne Termo Termo
