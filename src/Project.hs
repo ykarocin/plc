@@ -1,244 +1,11 @@
-module InterpretacaoEAnaliseEstaticaDelinguagens where
+module Project where
+import Data.List (find)
 
--- Interpretadores recebem programas como entrada. Strings como
---
--- "def inc = (lambda x . + x 1); def v = + 3 2; def resultado = inc v"
---
--- são dadas como entrada, e a saída é o resultado da execução.
---
--- Para interpretar programas, precisamos representr os programas de forma
--- abstrata, como uma árvore resultante do processo de parsing. Para
--- representar os programas de uma linguagem funcional simples,
--- temos o seguinte (identificador, número, lambda exp, aplicação, definição
--- e programa).
-
-type Id = String
-type Numero = Double
-data TermoLinFun = Identifier Id
-                 | Literal Numero
-                 | Lambda Id TermoLinFun
-                 | Aplicacao TermoLinFun TermoLinFun
-data Definicao = Def Id TermoLinFun
-type Programa = [Definicao]
-
-
--- Aplicacao String TermoLinFun TermoLinFun
--- seria específico para aplicações binárias.
---
--- Melhor como acima do que como acima
--- type Definicao = (String,TermoLinFun)
-
-
--- Por exemplo, o programa abaixo
---
--- def inc = (lambda x . + x 1); def v = + 3 2; def resultado = inc v
---
--- seria representado como
-
-def1 = Def "inc" (Lambda "x" (Aplicacao (Aplicacao (Identifier "+") (Identifier "x")) (Literal 1)))
-def2 = Def "v" (Aplicacao (Aplicacao (Identifier "+") (Literal 3)) (Literal 2))
-def3 = Def "resultado" (Aplicacao (Identifier "inc") (Identifier "v"))
-prog1 = [def1,def2,def3]
-
-
--- O resultado da interpretação seria um dos seguintes, já que a
--- linguagem manipula apenas números e funções.
-
-data ValorFun = Numero Double
-              | Funcao (ValorFun -> ValorFun)
-              | Excecao
-
-instance Show ValorFun where
-    show (Numero n) = show n
-    show (Funcao f) = "Function definition cannot be printed!"
-    show Excecao = "Excecao durante a execucao do interpretador"
-
-
--- A função que implementa o interpretador dos termos precisa receber como parâmetro um
--- ambiente, contendo as funções pré-definidas, e as definidas pelo programador.
-
-type Ambiente = [(Id,ValorFun)]
-
--- No nosso caso, o ambiente teria apenas a definição de "+".
-
-ambientesimples = [("+",Funcao (\x -> (Funcao (\y -> somaValorFun x y))))]
-data Valor = Num Double
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erro
-somaValorFun (Numero x) (Numero y) = Numero (x+y)
-somaValorFun _ _ = Excecao
-
-
--- Temos agora duas funções de interpretação, uma para termos e uma
--- para programas. A de termos simplesmente lê o ambiente. A de programa
--- propaga alterações no ambiente, para acumular as funções definidas.
-
-intTermo a (Identifier i) = getValor i a
-intTermo a (Literal l) = Numero l
-intTermo a (Lambda i t) = Funcao (\v -> intTermo ((i,v):a) t)
-intTermo a (Aplicacao t1 t2) = aplica v1 v2
-                                where v1 = intTermo a t1
-                                      v2 = intTermo a t2
-
-intPrograma a [] = Excecao
-intPrograma a [(Def i t)] = intTermo a t
-intPrograma a ((Def i t):ds) = intPrograma ((i,v):a) ds
-                               where v = intTermo a t
-
-getValor i [] = Excecao
-getValor i ((j,v):l) = if i == j then v else getValor i l
-
-aplica (Funcao f) v = f v
-aplica _ _ = Excecao
-
-
--- Exemplo de reescrita
---
--- intPrograma as [Def "x" (Aplicacao (Aplicacao (Identifier "+")
---                                               (Identifier "x"))
---                                    (Literal 1.0))] =
--- intTermo as (Aplicacao (Aplicacao (Identifier "+")
---                                   (Identifier "x"))
---                        (Literal 1.0)) =
--- aplica v1 v2
--- aplica (Funcao (\y -> somaValorFun Excecao y)) (Numero 1.0) =
--- (\y -> somaValorFun Excecao y) (Numero 1.0) =
--- somaValorFun Excecao (Numero 1.0) =
--- Excecao
---
--- v1 = intTermo as (Aplicacao (Identifier "+") (Identifier "x"))
---    = aplica v11 v12
---    = aplica (Funcao (\x -> (Funcao (\y -> somaValorFun x y))))) Excecao
---    = Funcao (\y -> somaValorFun Excecao y)
---
--- v11 = intTermo as Identifier "+" =
--- Funcao (\x -> (Funcao (\y -> somaValorFun x y))))
---
--- v12 = intTermo as Identifier "x" =
--- getValor "x" as =
--- Excecao
---data Valor = Num Double
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erro
--- v2 = intTermo as (Literal 1.0)
--- = Numero 1.0
-
--- Nas linguagens com atribuição (o valor de uma variável pode mudar ao
--- longo da execução), precisamos lidar com a noção de estado. Além do
--- ambiente contendo definições imutáveis, precisamos de uma noção de estado, ou
--- memória, para armazenar os valores das variáveis em um determinado ponto da
--- execução. A função de interpretação não só recebe o estado como parâmetro.
--- Ela também retorna como resultado o valor da interpretação e o novo estado,
--- contendo as alterações nos valores das variáveis.
-
--- Para simplifcar, temos apenas termos na linguagem, incluindo atribuições
--- (que podem representar tanto definições no sentido do interpretador anterior
--- quanto mudanças nos valores de variáveis) e composição sequencial (como o ";"
--- em Java, que entre outras coisas faz o papel da lista de definições da linguagem
--- anterior). Representamos, por simplicidade, soma como um termo específico da
--- linguagem.
-
-data Termo = Var Id
-           | Lit Numero
-           | Som Termo Termo
-           | Lam Id Termo
-           | Apl Termo Termo
-           | Atr Id Termo
-           | Seq Termo Termo
-
--- A aplicação "(lambda x . + x 2) 3" seria
-termo1 = (Apl (Lam "x" (Som (Var "x") (Lit 2))) (Lit 3))
-
--- A aplicação "(lambda x . + x y) 3" seria
-termo2 = (Apl (Lam "x" (Som (Var "x") (Var "y"))) (Lit 3))
-
--- A composição sequencial "y := (lambda x . + x y) 3 ; (lambda x . + x y) 3" seria
-termo3 = (Seq (Atr "y" termo2) termo2)
-
--- A composição sequencial "y := 3 ; (lambda x . + x y) 3" seria
-sq1 = (Seq (Atr "y" (Lit 3)) termo2)
-
--- A composição sequencial "y := 3 ; y := (lambda x . + x y) 3 ; (lambda x . + x y) 3" seria
-sq2 = (Seq (Atr "y" (Lit 3)) termo3)
-
--- A composição sequencial "y := (z := 5) + z ; y := (lambda x . + x y) 3 ; (lambda x . + x y) 3" seria
-sq3 = (Seq (Atr "y" (Som (Atr "z" (Lit 5)) (Var "z"))) termo3)
-
-
-
--- O resultado da interpretação seria um dos seguintes, já que a
--- linguagem manipula apenas números e funções. Como as funções
--- podem acessar e modificar variáveis que mudam de valor ao longo
--- da execução, é necessário receber não só o argumento da função,
--- e retornar seu resultado. É preciso receber também o estado atual,
--- e retornar o novo estado modificado pela execução da função.
-
-data Valor = Num Double
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erro
-
-type Estado = [(Id,Valor)]
-
-
--- int :: [(Id, Valor)] -> Termo -> [(Id, Valor)] -> (Valor, [(IVard, Valor)])
--- int :: Ambiente -> Termo -> Estado -> (Valor, Estado)
---
-
-int a (Var x) e = (search x (a ++ e), e)
-
-int a (Lit n) e = (Num n, e)
-
-int a (Som t u) e = (somaVal v1 v2, e2)
-                    where (v1,e1) = int a t e
-                          (v2,e2) = idata Valor = Num Double
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erront a u e1
-
-int a (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e)
-
-int a (Apl t u) e = app v1 v2 e2
-                    where (v1,e1) = int a t e
-                          (v2,e2) = int a u e1
-
-int a (Atr x t) e = (v1, wr (x,v1) e1)
-                    where (v1,e1) = int a t e
-
-int a (Seq t u) e = int a u e1
-                    where (_,e1) = int a t e
-
-
--- search :: Eq a => a -> [(a, Valor)] -> Valor
-
-search i [] = Erro
-search i ((j,v):l) = if i == j then v else search i l
-
--- somaVal :: Valor -> Valor -> Valor
-
-somaVal (Num x) (Num y) = Num (x+y)
-somaVal _ _ = Erro data Valor = Num Double
-           | Var Id
-           | LitB Boolean
-           | LitN Numero
-           | LitS String
-           | Fun (Valor -> Estado -> (Valor,Estado))
-           | Erro
-
-
--- app :: Valor -> Valor -> Estado -> (Valor, Estado)
-
-app (Fun f) v e = f v e
-app _ _ e = (Erro, e)
-
--- wr :: Eq a => (a, t) -> [(a, t)] -> [(a, t)]
-
-wr (i,v) [] = [(i,v)]VarVar
-
--------------------------------------------------------------------------
 type Id = String
 type Numero = Double
 
 data Termo = Var Id
-           | LitB Boolean
+           | LitB Bool
            | LitN Numero
            | LitS String
            --
@@ -262,12 +29,42 @@ data Termo = Var Id
            | FieldAccess Termo Id
            | Ref Termo
 
+instance Show Termo where
+    show (Var i)              = i
+    show (LitB b)             = show b
+    show (LitN n)             = show n
+    show (LitS s)             = show s
+    show (Atr t1 t2)          = show t1 ++ " = " ++ show t2
+    show (Mul t1 t2)          = show t1 ++ " * " ++ show t2
+    show (If c t1 t2)         = "if (" ++ show c ++ ") then " ++ show t1 ++ " else " ++ show t2
+    show (While c t)          = "while (" ++ show c ++ ") { " ++ show t ++ " }"
+    show (For ini c upd t)    = "for (" ++ show ini ++ "; " ++ show c ++ "; " ++ show upd ++ ") { " ++ show t ++ " }"
+    show (Fun nome ps corpo)  = "fun " ++ nome ++ "(" ++ unwords ps ++ ") { " ++ show corpo ++ " }"
+    show (Call obj m args)    = show obj ++ "." ++ m ++ "(" ++ unwords (map show args) ++ ")"
+    show (Lam p corpo)        = "\\" ++ p ++ " -> " ++ show corpo
+    show (Apl t1 t2)          = show t1 ++ " " ++ show t2
+    show (Seq t1 t2)          = show t1 ++ " ; " ++ show t2
+    show (Class nome _ cs)    = "class " ++ nome ++ " { ... campos: " ++ unwords cs ++ " }"
+    show (New nome)           = "new " ++ nome ++ "()"
+    show (InstanceOf t cn)    = show t ++ " instanceof " ++ cn
+    show This                 = "this"
+    show (FieldAccess t c)    = show t ++ "." ++ c
+    show (Ref t)              = "ref(" ++ show t ++ ")"
+
 data Comparacao = Eq Termo Termo
                | Ne Termo Termo
                | Lt Termo Termo
                | Le Termo Termo
                | Gt Termo Termo
-               | Ge Termo Termo Termo
+               | Ge Termo Termo
+
+instance Show Comparacao where
+    show (Eq t1 t2) = show t1 ++ " == " ++ show t2
+    show (Ne t1 t2) = show t1 ++ " != " ++ show t2
+    show (Lt t1 t2) = show t1 ++ " < "  ++ show t2
+    show (Le t1 t2) = show t1 ++ " <= " ++ show t2
+    show (Gt t1 t2) = show t1 ++ " > "  ++ show t2
+    show (Ge t1 t2) = show t1 ++ " >= " ++ show t2
 
 -- Declaração de classes
 type ClasseId = String
@@ -277,35 +74,47 @@ type Classe = (ClasseId, [Metodo], [CampoId])
 
 data Metodo = Metodo MetodoId [Id] Termo
 
-data Valor = B Boolean
+instance Show Metodo where
+    show (Metodo nome ps corpo) = "method " ++ nome ++ "(" ++ unwords ps ++ ") { " ++ show corpo ++ " }"
+
+data Valor = B Bool
            | N Numero
            | S String
-           | Class ([Metodo] [Id])
-           | Fun (Valor -> Estado -> (Valor,Estado))
+           | Class ([Metodo], [Id])
+           | FunValue (Valor -> Estado -> Heap -> AmbienteClasse -> (Valor, Estado, Heap, AmbienteClasse))
            | VVoid 
            | Erro
+
+instance Show Valor where
+    show (B b)         = show b
+    show (N n)         = show n
+    show (S s)         = show s
+    show (Class _)     = "Class definition cannot be printed!"
+    show (FunValue _)       = "Function definition cannot be printed!"
+    show VVoid         = "void"
+    show Erro          = "Erro durante a execução do interpretador"
+
 
 type Estado = [(String,Valor)]
 type Ambiente = [(String,Termo)] -- Ambiente de variáveis e funções
 type AmbienteClasse = [(ClasseId, Classe)] -- Ambiente de classes
 type Heap = [(Integer, (String,Estado))]
 
--- int :: [(Integer, (String,Estado))] -> [(String, Termo)] -> [(ClasseId, Classe)] -> Termo -> [(String, Valor)] -> (Valor, [(String,Valor)], [(Integer, (String,Estado))], [(ClasseId, Classe)])
--- int :: Heap -> Ambiente -> AmbienteClasse -> Termo -> Estado -> (Valor, Estado, Heap, AmbienteClasse)
---
+int :: [(Integer, (String,Estado))] -> [(String, Termo)] -> [(ClasseId, Classe)] -> Termo -> [(String, Valor)] -> (Valor, [(String,Valor)], [(Integer, (String,Estado))], [(ClasseId, Classe)])
+int :: Heap -> Ambiente -> AmbienteClasse -> Termo -> Estado -> (Valor, Estado, Heap, AmbienteClasse)
 
-ambiente = [("*",Funcao (\x -> (Funcao (\y -> mulValor x y))))]
-mulValor (Numero x) (Numero y) = Numero (x*y)
-mulValor _ _ = Excecao
+ambiente = [("*",Fun (\x -> (Fun (\y -> mulValor x y))))]
+mulValor (N x) (N y) = N (x*y)
+mulValor _ _ = Erro
 
 int h a ac (Var x) e = (search x (a ++ e), e, h, ac)
 
 int h a ac (LitB b) e = (B b, e, h, ac)
-int h a ac (LitS s) e = (S n, e, h, ac)
+int h a ac (LitS s) e = (S s, e, h, ac)
 int h a ac (LitN n) e = (N n, e, h, ac)
 
 int h a ac (Atr x t) e = (v1, wr (x,v1) e1, h1, ac1)
-                    where (v1,e1,h1, ac1) = int a t e h ac
+                    where (v1,e1,h1, ac1) = int h a ac t e
 
 -- IMPLEMENTAÇÃO DE MULTIPLICAÇÃO - lgs4
 int h a ac (Mul t1 t2) e = (mulValor v1 v2, e2, h2, ac2)
@@ -367,15 +176,15 @@ int h a ac (InstanceOf t className) e = (resultado, e1, h1, ac1)
               _ -> B False
 --lgs4
 
-int h a ac (Lam x t) e = (Fun (\v -> int ((x,v):a) t), e, h, ac)
+int h a ac (Lam x t) e = (FunValue (\v -> int ((x,v):a) t), e, h, ac)
 
 int h a ac (Apl t u) e = app v1 v2 e2 h2 ac2
-                    where (v1,e1, h1, ac1) = int a t e h ac
-                          (v2,e2, h2, ac2) = int a u e1 h1 ac1
+                    where (v1,e1, h1, ac1) = int h a ac t e
+                          (v2,e2, h2, ac2) = int h a ac1 u e1
 
 
-int h a ac (Seq t u) e = int a u e1 h1 ac1 
-                    where (_,e1, h1, ac1) = int a t e h ac
+int h a ac (Seq t u) e = int h a ac u e1 h1 ac1 
+                    where (_,e1, h1, ac1) = int h a ac t e
 
 int h a ac (Ref t) e = resultado
   where (v, e1, h1, ac1) = int h a ac t e
@@ -520,8 +329,18 @@ chamaMetodo i nome args e h ac = int h [] ac corpo (thisEnv : escopo ++ estadoOb
 
 -- Chamada de função global:
 chamaFuncao :: Id -> [Valor] -> Estado -> Heap -> AmbienteClasse -> (Valor, Estado, Heap, AmbienteClasse)
-chamaFuncao nome (arg:_) e h ac = f arg e
-  where Just (Fun f) = lookup nome ambiente
+chamaFuncao nome args e h ac = aplicaArgs funcao args e h ac
+  where funcao = case lookup nome ambiente of
+        Just (Fun f) -> f
+        _            -> \_ e' h' ac' -> (Erro, e', h', ac')
+
+aplicaArgs :: (Valor -> Estado -> Heap -> AmbienteClasse -> (Valor, Estado, Heap, AmbienteClasse)) -> [Valor] -> Estado -> Heap -> AmbienteClasse -> (Valor, Estado, Heap, AmbienteClasse)
+aplicaArgs f []     e h ac = f VVoid e h ac
+aplicaArgs f (v:vs) e h ac =
+  let (v', e', h', ac') = f v e h ac
+  in aplicaArgs (\_ e'' h'' ac'' -> (v', e'', h'', ac'')) vs e' h' ac'
+
+
 
 -- search :: Eq a => a -> [(a, Valor)] -> Valor
 
@@ -530,4 +349,12 @@ search i ((j,v):l) = if i == j then v else search i l
 
 -- wr :: Eq a => (a, t) -> [(a, t)] -> [(a, t)]
 
-wr (i,v) [] = [(i,v)]VarVar
+wr :: Eq a => (a, t) -> [(a, t)] -> [(a, t)]
+wr (i,v) [] = [(i,v)]
+wr (i,v) ((j,w):l)
+  | i == j    = (i,v) : l
+  | otherwise = (j,w) : wr (i,v) l
+
+app :: Valor -> Valor -> Estado -> Heap -> AmbienteClasse -> (Valor, Estado, Heap, AmbienteClasse)
+app (FunValue f) v e h ac = f v e h ac
+app _ _ e h ac = (Erro, e, h, ac)
